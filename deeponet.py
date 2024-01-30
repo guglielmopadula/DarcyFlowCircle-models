@@ -11,7 +11,7 @@ points=a.points
 train_dataloader=a.train_loader
 test_dataloader=a.test_loader
 len_points=len(points)
-a,b=a.train_dataset.tensors
+_,a,b=a.train_dataset.tensors
 a_max=torch.max(a)
 a_min=torch.min(a)
 b_max=torch.max(b)
@@ -49,7 +49,7 @@ low_m=0
 for epoch in trange(Epochs):
     for batch in train_dataloader:
         optimizer.zero_grad()
-        v,u=batch
+        _,v,u=batch
         v=(v-a_min)/(a_max-a_min)
         u=(u-b_min)/(b_max-b_min)
         v=v.reshape(v.shape[0],-1)
@@ -69,7 +69,7 @@ for epoch in trange(Epochs):
 
 model=model.eval()
 for batch in test_dataloader:
-    v,u=batch
+    _,v,u=batch
     pred=model.forward_eval(v[:,index_subset],points)
     pred=pred.reshape(pred.shape[0],-1)
 
@@ -81,7 +81,7 @@ sup_train_loss=0
 low_train_loss=0
 with torch.no_grad():
     for batch in train_dataloader:
-        v,u=batch
+        _,v,u=batch
         pred=model.forward_eval(v[:,index_subset],points)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
@@ -96,7 +96,7 @@ sup_test_loss=0
 low_test_loss=0
 with torch.no_grad():
     for batch in test_dataloader:
-        v,u=batch
+        _,v,u=batch
         pred=model.forward_eval(v[:,index_subset],points)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)

@@ -8,4 +8,4 @@ performances, are summed up here.
 
 |   Model     |rel u train error|rel u test error| 
 |-------------|-----------------|----------------|
-|DeepONet     |6.1e-01          |6.1e-01         |
+|DeepONet     |9.3e-01          |9.3e-01         |
