@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 from tqdm import trange
+from torch.func import vmap,hessian
+from time import time
 a=DarcyFlowCircle(10)
 triangles=a.triangles
 sc_matrix=a.sc_matrix
@@ -29,19 +31,62 @@ class DeepONet(nn.Module):
         self.trunk_net=nn.Sequential(nn.Linear(2,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(), nn.Linear(100,medium_size))
     
     def forward(self, x, points):
-        x=torch.sum(self.branch_net(x).unsqueeze(1)*self.trunk_net(points).unsqueeze(0),axis=2)
+        x=(0.45-torch.linalg.norm(points-0.5,axis=-1))*torch.sum(self.branch_net(x).unsqueeze(1)*self.trunk_net(points).unsqueeze(0),axis=2)
         return x
     
     def forward_eval(self, x, points):
         x=(x-a_min)/(a_max-a_min)
-        x=torch.sum(self.branch_net(x).unsqueeze(1)*self.trunk_net(points).unsqueeze(0),axis=2)
+        x=(0.45-torch.linalg.norm(points-0.5,axis=-1))*torch.sum(self.branch_net(x).unsqueeze(1)*self.trunk_net(points).unsqueeze(0),axis=2)
         return x*(b_max-b_min)+b_min
     
+
+
+class SimpleDeepONet(nn.Module):
+    def __init__(self,
+                num_start_points,
+                medium_size
+                ):
+    
+        super().__init__()
+        self.num_start_points=num_start_points
+        self.medium_size=medium_size
+        self.branch_net=nn.Sequential(nn.Linear(num_start_points,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(), nn.Linear(100,medium_size))
+        self.trunk_net=nn.Sequential(nn.Linear(2,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(), nn.Linear(100,medium_size))
+    
+    def forward(self, x, points):
+        x=(0.45-torch.linalg.norm(points-0.5))*torch.sum(self.branch_net(x)*self.trunk_net(points))
+        return x
+    
+    def forward_eval(self, x, points):
+        x=(x-a_min)/(a_max-a_min)
+        x=(0.45-torch.linalg.norm(points-0.5))*torch.sum(self.branch_net(x)*self.trunk_net(points))
+        return x*(b_max-b_min)+b_min
+
+
+
+def laplacian(f,x,points):
+  return torch.diagonal(vmap(vmap(hessian(f,argnums=1),in_dims=(None,0)),in_dims=(0,None))(x,points),dim1 = -2, dim2 = -1).sum(axis=2)
+
 index_subset=torch.randperm(len_points)[:1000]
 
-model=DeepONet(1000,20)
-Epochs=100
-optimizer=torch.optim.Adam(model.parameters(),lr=0.001)
+
+non_vec_model=SimpleDeepONet(1000,20)
+
+def model_1(x,points):
+    return torch.vmap(non_vec_model,in_dims=(None,0))(x,points)
+
+def model(x,points):
+    return torch.vmap(model_1,in_dims=(0,None))(x,points)
+
+def model_1_eval(x,points):
+    return torch.vmap(non_vec_model.forward_eval,in_dims=(None,0))(x,points)
+
+def model_eval(x,points):
+    return torch.vmap(model_1_eval,in_dims=(0,None))(x,points)
+
+
+Epochs=1
+optimizer=torch.optim.Adam(non_vec_model.parameters(),lr=0.001)
 loss_fn=nn.MSELoss()
 sup_m=0
 low_m=0
@@ -55,7 +100,7 @@ for epoch in trange(Epochs):
         u=u.reshape(u.shape[0],-1)
         pred=model(v[:,index_subset],points)
         pred=pred.reshape(pred.shape[0],-1)
-        loss=torch.linalg.norm(pred-u)
+        loss=torch.linalg.norm(pred-u)+0.01*torch.linalg.norm(v*laplacian(non_vec_model,v[:,index_subset],points)-1)
         loss.backward()
         optimizer.step()
         with torch.no_grad():
@@ -66,8 +111,6 @@ for epoch in trange(Epochs):
         print(np.var(pred.numpy()))
         print(np.var(u.numpy()))
 
-model=model.eval()
-
 def norm(u):
     return u@sc_matrix@u.T
 
@@ -77,7 +120,7 @@ low_train_loss=0
 with torch.no_grad():
     for batch in train_dataloader:
         _,v,u=batch
-        pred=model.forward_eval(v[:,index_subset],points)
+        pred=model_eval(v[:,index_subset],points)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
         u=u.numpy()
@@ -92,7 +135,7 @@ low_test_loss=0
 with torch.no_grad():
     for batch in test_dataloader:
         _,v,u=batch
-        pred=model.forward_eval(v[:,index_subset],points)
+        pred=model_eval(v[:,index_subset],points)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
         u=u.numpy()
@@ -115,4 +158,4 @@ ax1[1].set_aspect('equal')
 ax1[1].set_title('DeepONet')
 tpc = ax1[1].tripcolor(triang, pred[-1], shading='flat',vmin=b_min,vmax=b_max)
 #fig1.colorbar(tpc)
-fig1.savefig('deeponet.png')
+fig1.savefig('deeponet_reg.png')

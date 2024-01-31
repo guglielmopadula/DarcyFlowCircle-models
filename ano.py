@@ -16,32 +16,58 @@ a_min=torch.min(a)
 b_max=torch.max(b)
 b_min=torch.min(b)
 
-class DeepONet(nn.Module):
-    def __init__(self,
-                num_start_points,
-                medium_size
-                ):
+#Averaging Neural Operator
+class ANOLayer(nn.Module):
+    def __init__(self,hidden_size):
+        super().__init__()
+        self.lin=nn.Linear(hidden_size,hidden_size)
+
+    def forward(self,x):
+        return self.lin(x)+torch.mean(x,axis=1).unsqueeze(1)
+    
+class LAR(nn.Module):  
+    def __init__(self,hidden_size):
+        super().__init__()
+        self.ano=ANOLayer(hidden_size)
+        self.relu=nn.ReLU()
+        self.bn=nn.BatchNorm1d(hidden_size)
+        
+    def forward(self,x):
+        x=self.ano(x)
+        s=x.shape[1]
+        n=x.shape[0]
+        x=x.reshape(x.shape[0]*s,-1)
+        x=self.bn(x)
+        x=x.reshape(n,s,-1)
+        return self.relu(x)
+
+class ANO(nn.Module):
+    def __init__(self,input_size,output_size,hidden_size,points,BATCH_SIZE):
     
         super().__init__()
-        self.num_start_points=num_start_points
-        self.medium_size=medium_size
-        self.branch_net=nn.Sequential(nn.Linear(num_start_points,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(), nn.Linear(100,medium_size))
-        self.trunk_net=nn.Sequential(nn.Linear(2,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(),nn.Linear(100,100), nn.ReLU(), nn.Linear(100,medium_size))
-    
-    def forward(self, x, points):
-        x=torch.sum(self.branch_net(x).unsqueeze(1)*self.trunk_net(points).unsqueeze(0),axis=2)
+        self.R=nn.Linear(input_size+2,hidden_size)
+        self.hidden_layers=nn.Sequential(LAR(hidden_size),LAR(hidden_size),LAR(hidden_size))
+        self.Q=nn.Linear(hidden_size+2,output_size)
+        self.points=points.unsqueeze(0).repeat(BATCH_SIZE,1,1)
+    def forward(self, x):
+        x=self.R(torch.cat((x,self.points),2))
+        x=self.hidden_layers(x)
+        x=self.Q(torch.cat((x,self.points),2))
         return x
     
-    def forward_eval(self, x, points):
+    def forward_eval(self, x):
         x=(x-a_min)/(a_max-a_min)
-        x=torch.sum(self.branch_net(x).unsqueeze(1)*self.trunk_net(points).unsqueeze(0),axis=2)
+        x=self.R(torch.cat((x,self.points),2))
+        x=self.hidden_layers(x)
+        x=self.Q(torch.cat((x,self.points),2))
         return x*(b_max-b_min)+b_min
     
-index_subset=torch.randperm(len_points)[:1000]
 
-model=DeepONet(1000,20)
-Epochs=100
-optimizer=torch.optim.Adam(model.parameters(),lr=0.001)
+
+    
+model=ANO(1,1,100,points,10)
+Epochs=10
+optimizer=torch.optim.Adam(model.parameters(),lr=0.0001)    
 loss_fn=nn.MSELoss()
 sup_m=0
 low_m=0
@@ -51,9 +77,9 @@ for epoch in trange(Epochs):
         _,v,u=batch
         v=(v-a_min)/(a_max-a_min)
         u=(u-b_min)/(b_max-b_min)
-        v=v.reshape(v.shape[0],-1)
+        v=v.reshape(v.shape[0],-1,1)
         u=u.reshape(u.shape[0],-1)
-        pred=model(v[:,index_subset],points)
+        pred=model(v)
         pred=pred.reshape(pred.shape[0],-1)
         loss=torch.linalg.norm(pred-u)
         loss.backward()
@@ -77,7 +103,8 @@ low_train_loss=0
 with torch.no_grad():
     for batch in train_dataloader:
         _,v,u=batch
-        pred=model.forward_eval(v[:,index_subset],points)
+        v=v.reshape(v.shape[0],-1,1)
+        pred=model.forward_eval(v)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
         u=u.numpy()
@@ -92,7 +119,8 @@ low_test_loss=0
 with torch.no_grad():
     for batch in test_dataloader:
         _,v,u=batch
-        pred=model.forward_eval(v[:,index_subset],points)
+        v=v.reshape(v.shape[0],-1,1)
+        pred=model.forward_eval(v)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
         u=u.numpy()
@@ -112,7 +140,7 @@ ax1[0].set_aspect('equal')
 ax1[0].set_title('Real')
 tpc = ax1[0].tripcolor(triang, u[-1], shading='flat',vmin=b_min,vmax=b_max)
 ax1[1].set_aspect('equal')
-ax1[1].set_title('DeepONet')
+ax1[1].set_title('ANO')
 tpc = ax1[1].tripcolor(triang, pred[-1], shading='flat',vmin=b_min,vmax=b_max)
 #fig1.colorbar(tpc)
-fig1.savefig('deeponet.png')
+fig1.savefig('ano.png')
