@@ -20,8 +20,8 @@ class FVFT:
         self.batch_size = x_positions.shape[0]
         self.modes = modes
 
-        self.X_ = torch.arange(modes).repeat(self.batch_size, 1)[:,:,None].float()
-        self.Y_ = torch.arange(modes).repeat(self.batch_size, 1)[:,:,None].float()
+        self.X_ = torch.arange(modes).repeat(self.batch_size, 1)[:,:,None].float().cuda()
+        self.Y_ = torch.arange(modes).repeat(self.batch_size, 1)[:,:,None].float().cuda()
 
 
         self.V_fwd_X, self.V_inv_X, self.V_fwd_Y, self.V_inv_Y = self.make_matrix()
@@ -180,23 +180,23 @@ BATCH_SIZE=1
 a=DarcyFlowCircle(BATCH_SIZE)
 triangles=a.triangles
 sc_matrix=a.sc_matrix
-points=a.points.unsqueeze(0).repeat(BATCH_SIZE,1,1)
+points=a.points.unsqueeze(0).repeat(BATCH_SIZE,1,1).cuda()
 train_dataloader=a.train_loader
 test_dataloader=a.test_loader
-model=PreVNO(12,12,100,points)
+model=PreVNO(12,12,100,points).cuda()
 
 
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 params = sum([np.prod(p.size()) for p in model_parameters])
 print(params)
 _,a,b=a.train_dataset.tensors
-a_max=torch.max(a)
-a_min=torch.min(a)
-b_max=torch.max(b)
-b_min=torch.min(b)
+a_max=torch.max(a).cuda()
+a_min=torch.min(a).cuda()
+b_max=torch.max(b).cuda()
+b_min=torch.min(b).cuda()
 
 
-Epochs=1
+Epochs=10
 optimizer=torch.optim.Adam(model.parameters(),lr=0.001)
 loss_fn=nn.MSELoss()
 sup_m=0
@@ -207,10 +207,10 @@ for epoch in trange(Epochs):
     for batch in train_dataloader:
         optimizer.zero_grad()
         _,v,u=batch
-        v=v.reshape(v.shape[0],-1,1)
+        v=v.reshape(v.shape[0],-1,1).cuda()
+        u=u.reshape(u.shape[0],-1,1).cuda()
         v=(v-a_min)/(a_max-a_min)
         u=(u-b_min)/(b_max-b_min)
-        u=u.reshape(u.shape[0],-1,1)
         pred=model(v)
         pred=pred.reshape(pred.shape[0],-1,1)
         loss=torch.linalg.norm(pred-u)
@@ -225,8 +225,8 @@ for epoch in trange(Epochs):
             low_m+=torch.sum(torch.linalg.norm(u,axis=1)**2)/(len(train_dataloader))
     with torch.no_grad():
         print(f'Epoch: {epoch}, Loss: {torch.sqrt(sup_m/low_m)}')
-        print(np.var(pred.numpy()))
-        print(np.var(u.numpy()))
+        print(torch.var(pred))
+        print(torch.var(u))
 
 
 
@@ -242,14 +242,14 @@ low_train_loss=0
 with torch.no_grad():
     for batch in train_dataloader:
         _,v,u=batch
-        v=v.reshape(v.shape[0],-1,1)
+        v=v.reshape(v.shape[0],-1,1).cuda()
         v=(v-a_min)/(a_max-a_min)
         pred=model.forward(v)*(b_max-b_min)+b_min
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
-        u=u.numpy()
-        pred=pred.numpy()
-        train_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred)/np.diag(norm(u)))))/len(train_dataloader)
+        u=u.cpu().numpy()
+        pred=pred.cpu().numpy()
+        train_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred))/np.diag(norm(u))))/len(train_dataloader)
 
 print(train_rel_loss)
 
@@ -259,13 +259,14 @@ low_test_loss=0
 with torch.no_grad():
     for batch in test_dataloader:
         _,v,u=batch
-        v=v.reshape(v.shape[0],-1,1)
+        v=v.reshape(v.shape[0],-1,1).cuda()
+        v=(v-a_min)/(a_max-a_min)
         pred=model.forward(v)*(b_max-b_min)+b_min
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
-        u=u.numpy()
-        pred=pred.numpy()
-        test_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred)/np.diag(norm(u)))))/len(test_dataloader)
+        u=u.cpu().numpy()
+        pred=pred.cpu().numpy()
+        test_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred))/np.diag(norm(u))))/len(test_dataloader)
 
 
 print(test_rel_loss)
@@ -273,14 +274,14 @@ print(test_rel_loss)
 
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
-points=points.numpy().reshape(-1,2)
+points=points.cpu().numpy().reshape(-1,2)
 triang=tri.Triangulation(points[:,0],points[:,1],triangles)
 fig1, ax1 = plt.subplots(1,2)
 ax1[0].set_aspect('equal')
 ax1[0].set_title('Real')
 tpc = ax1[0].tripcolor(triang, u[-1], shading='flat',vmin=b_min,vmax=b_max)
 ax1[1].set_aspect('equal')
-ax1[1].set_title('DeepONet')
+ax1[1].set_title('VNO')
 tpc = ax1[1].tripcolor(triang, pred[-1], shading='flat',vmin=b_min,vmax=b_max)
 #fig1.colorbar(tpc)
 fig1.savefig('vno.png')

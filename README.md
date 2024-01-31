@@ -9,5 +9,6 @@ performances, are summed up here.
 |   Model     |rel u train error|rel u test error| 
 |-------------|-----------------|----------------|
 |DeepONet     |9.3e-01          |9.3e-01         |
-|DeepONet-reg |4.5e-01          |4.5e-01
+|DeepONet-reg |4.5e-01          |4.5e-01         |
 |ANO          |1.2e-00          |1.2e-00         |
+|VNO          |3.7e-01          |3.7e-01         |
