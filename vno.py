@@ -189,7 +189,7 @@ model=PreVNO(12,12,100,points).cuda()
 model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 params = sum([np.prod(p.size()) for p in model_parameters])
 print(params)
-_,a,b=a.train_dataset.tensors
+a,b=a.train_dataset.tensors
 a_max=torch.max(a).cuda()
 a_min=torch.min(a).cuda()
 b_max=torch.max(b).cuda()
@@ -206,7 +206,7 @@ for epoch in trange(Epochs):
     start=time()
     for batch in train_dataloader:
         optimizer.zero_grad()
-        _,v,u=batch
+        v,u=batch
         v=v.reshape(v.shape[0],-1,1).cuda()
         u=u.reshape(u.shape[0],-1,1).cuda()
         v=(v-a_min)/(a_max-a_min)
@@ -241,7 +241,7 @@ sup_train_loss=0
 low_train_loss=0
 with torch.no_grad():
     for batch in train_dataloader:
-        _,v,u=batch
+        v,u=batch
         v=v.reshape(v.shape[0],-1,1).cuda()
         v=(v-a_min)/(a_max-a_min)
         pred=model.forward(v)*(b_max-b_min)+b_min
@@ -258,7 +258,7 @@ sup_test_loss=0
 low_test_loss=0
 with torch.no_grad():
     for batch in test_dataloader:
-        _,v,u=batch
+        v,u=batch
         v=v.reshape(v.shape[0],-1,1).cuda()
         v=(v-a_min)/(a_max-a_min)
         pred=model.forward(v)*(b_max-b_min)+b_min

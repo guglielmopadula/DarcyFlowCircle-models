@@ -5,18 +5,18 @@ import numpy as np
 from tqdm import trange
 from torch.func import vmap,hessian
 from time import time
-a=DarcyFlowCircle(10)
+a=DarcyFlowCircle(5)
 triangles=a.triangles
 sc_matrix=a.sc_matrix
-points=a.points
+points=a.points.cuda()
 train_dataloader=a.train_loader
 test_dataloader=a.test_loader
 len_points=len(points)
-_,a,b=a.train_dataset.tensors
-a_max=torch.max(a)
-a_min=torch.min(a)
-b_max=torch.max(b)
-b_min=torch.min(b)
+a,b=a.train_dataset.tensors
+a_max=torch.max(a).cuda()
+a_min=torch.min(a).cuda()
+b_max=torch.max(b).cuda()
+b_min=torch.min(b).cuda()
 
 class DeepONet(nn.Module):
     def __init__(self,
@@ -67,10 +67,10 @@ class SimpleDeepONet(nn.Module):
 def laplacian(f,x,points):
   return torch.diagonal(vmap(vmap(hessian(f,argnums=1),in_dims=(None,0)),in_dims=(0,None))(x,points),dim1 = -2, dim2 = -1).sum(axis=2)
 
-index_subset=torch.randperm(len_points)[:1000]
+index_subset=torch.randperm(len_points)[:1000].cuda()
 
 
-non_vec_model=SimpleDeepONet(1000,20)
+non_vec_model=SimpleDeepONet(1000,20).cuda()
 
 def model_1(x,points):
     return torch.vmap(non_vec_model,in_dims=(None,0))(x,points)
@@ -85,7 +85,7 @@ def model_eval(x,points):
     return torch.vmap(model_1_eval,in_dims=(0,None))(x,points)
 
 
-Epochs=1
+Epochs=10
 optimizer=torch.optim.Adam(non_vec_model.parameters(),lr=0.001)
 loss_fn=nn.MSELoss()
 sup_m=0
@@ -93,7 +93,9 @@ low_m=0
 for epoch in trange(Epochs):
     for batch in train_dataloader:
         optimizer.zero_grad()
-        _,v,u=batch
+        v,u=batch
+        v=v.cuda()
+        u=u.cuda()
         v=(v-a_min)/(a_max-a_min)
         u=(u-b_min)/(b_max-b_min)
         v=v.reshape(v.shape[0],-1)
@@ -108,8 +110,8 @@ for epoch in trange(Epochs):
             low_m+=torch.sum(torch.linalg.norm(u,axis=1)**2)/(len(train_dataloader))
     with torch.no_grad():
         print(f'Epoch: {epoch}, Loss: {torch.sqrt(sup_m/low_m)}')
-        print(np.var(pred.numpy()))
-        print(np.var(u.numpy()))
+        print(torch.var(pred))
+        print(torch.var(u))
 
 def norm(u):
     return u@sc_matrix@u.T
@@ -119,12 +121,14 @@ sup_train_loss=0
 low_train_loss=0
 with torch.no_grad():
     for batch in train_dataloader:
-        _,v,u=batch
+        v,u=batch
+        v=v.cuda()
+        u=u.cuda()
         pred=model_eval(v[:,index_subset],points)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
-        u=u.numpy()
-        pred=pred.numpy()
+        u=u.cpu().numpy()
+        pred=pred.cpu().numpy()
         train_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred)/np.diag(norm(u)))))/len(train_dataloader)
 
 print(train_rel_loss)
@@ -134,12 +138,14 @@ sup_test_loss=0
 low_test_loss=0
 with torch.no_grad():
     for batch in test_dataloader:
-        _,v,u=batch
+        v,u=batch
+        v=v.cuda()
+        u=u.cuda()
         pred=model_eval(v[:,index_subset],points)
         u=u.reshape(u.shape[0],-1)
         pred=pred.reshape(pred.shape[0],-1)
-        u=u.numpy()
-        pred=pred.numpy()
+        u=u.cpu().numpy()
+        pred=pred.cpu().numpy()
         test_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred)/np.diag(norm(u)))))/len(test_dataloader)
 
 
@@ -148,7 +154,7 @@ print(test_rel_loss)
 
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
-
+points=points.cpu().numpy()
 triang=tri.Triangulation(points[:,0],points[:,1],triangles)
 fig1, ax1 = plt.subplots(1,2)
 ax1[0].set_aspect('equal')
