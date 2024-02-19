@@ -1,5 +1,5 @@
 import numpy as np
-from ezyrb import RBF, GPR
+from ezyrb import RBF, GPR, POD
 from sklearn.tree import DecisionTreeRegressor
 import scipy.linalg
 from darcyflowcircle import DarcyFlowCircle
@@ -77,6 +77,7 @@ class REIM():
         self.threshold=threshold
         self.m_basis=m_basis
         self.num_times=num_times
+    
     def fit(self,y):
         threshold_tmp=np.inf
         m_max=y.shape[0]
@@ -105,6 +106,11 @@ class REIM():
 
     def get_basis(self):
         return self.basis
+
+
+
+
+
 
 
 class Model():
