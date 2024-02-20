@@ -190,10 +190,10 @@ model_parameters = filter(lambda p: p.requires_grad, model.parameters())
 params = sum([np.prod(p.size()) for p in model_parameters])
 print(params)
 a,b=a.train_dataset.tensors
-a_max=torch.max(a).cuda()
-a_min=torch.min(a).cuda()
-b_max=torch.max(b).cuda()
-b_min=torch.min(b).cuda()
+a_max=torch.max(a).item()
+a_min=torch.min(a).item()
+b_max=torch.max(b).item()
+b_min=torch.min(b).item()
 
 
 Epochs=10
@@ -249,7 +249,9 @@ with torch.no_grad():
         pred=pred.reshape(pred.shape[0],-1)
         u=u.cpu().numpy()
         pred=pred.cpu().numpy()
-        train_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred))/np.diag(norm(u))))/len(train_dataloader)
+        u_bar=(u-b_min)/(b_max-b_min)
+        pred_bar=(pred-b_min)/(b_max-b_min)
+        train_rel_loss+=np.mean(np.sqrt(np.diag(norm(u_bar-pred_bar))/np.diag(norm(u_bar+1))))/len(train_dataloader)
 
 print(train_rel_loss)
 
@@ -266,7 +268,9 @@ with torch.no_grad():
         pred=pred.reshape(pred.shape[0],-1)
         u=u.cpu().numpy()
         pred=pred.cpu().numpy()
-        test_rel_loss+=np.mean(np.sqrt(np.diag(norm(u-pred))/np.diag(norm(u))))/len(test_dataloader)
+        u_bar=(u-b_min)/(b_max-b_min)
+        pred_bar=(pred-b_min)/(b_max-b_min)
+        test_rel_loss+=np.mean(np.sqrt(np.diag(norm(u_bar-pred_bar))/np.diag(norm(u_bar+1))))/len(test_dataloader)
 
 
 print(test_rel_loss)

@@ -8,10 +8,9 @@ performances, are summed up here.
 
 |Model              |rel u train error|rel u test error| 
 |-------------------|-----------------|----------------|
-|DeepONet           |4.9e-01          |4.8e-01         |
-|DeepONet-reg       |1.6e-01          |1.4e-01         |
-|ANO                |2.0e-00          |1.8e-00         |
-|VNO                |2.2e-01          |2.1e-01         |
-|EIMPoints+RBF      |3.2e-01          |3.7e-01         |
-|EIMPoints+TreeReg  |3.2e-01          |4.0e-01         |
-|POD+RBF            |3.2e-01          |3.7e-01         |
+|DeepONet           |0.009            |0.009           |
+|DeepONet-reg       |0.005          | |0.004           |
+|ANO                |0.05             |0.05            |
+|VNO                |0.017            |0.018           |
+|POD+RBF            |5.4e-07          |0.0004          |
+|POD+Tree           |5.4e-07          |0.0004          |

@@ -30,7 +30,7 @@ u_test=(u_test-b_min)/(b_max-b_min)
 
 class Operator():
     def __init__(self,m,p): #m is the number of sensors
-        self.model_trunk=RBF(neighbors=10)
+        self.model_trunk=DecisionTreeRegressor(max_depth=100)
         self.model_branch=RBF()
         self.pod=POD(method='randomized_svd',rank=p)
         self.m=m
@@ -86,7 +86,7 @@ ax1[1].set_aspect('equal')
 ax1[1].set_title('EIM+RBF')
 tpc = ax1[1].tripcolor(triang, u_pred_test[-1], shading='flat',vmin=b_min,vmax=b_max)
 #fig1.colorbar(tpc)
-fig1.savefig('rbf_pod.png')
+fig1.savefig('tree_pod.png')
 
 print(loss_train)
 print(loss_test)
